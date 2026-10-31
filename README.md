@@ -11,14 +11,16 @@ that sync: a Fastify, TypeScript, and Postgres API, and a Flutter client with a 
 database and an outbox queue. The domain is offline order taking. The reasons are in
 [ADR 0001](docs/decisions/0001-stack.md).
 
-Status: the API's push and pull endpoints exist. The Flutter client does not. See the
-[roadmap](#roadmap).
+Status: the API and the Flutter app both work. The app has run on Linux desktop. It has not
+been run on Android, though CI builds the Android APK. See the [roadmap](#roadmap).
 
-## Planned architecture
+![The app offline with one change waiting, after it synced, and after a conflict](docs/images/mobile-sync.png)
+
+## Architecture
 
 ```mermaid
 flowchart LR
-  subgraph phone["Flutter app (planned)"]
+  subgraph phone["Flutter app"]
     ui[UI] --> sqlite[(SQLite)]
     ui --> outbox[(Outbox queue)]
     outbox --> client[Sync client]
@@ -30,10 +32,12 @@ flowchart LR
 
 The phone writes to SQLite and adds each change to the outbox in the same transaction. The sync
 client pushes the outbox to the API and retries until the API confirms. The client then pulls
-the changes it has not seen, using a cursor into a change log in Postgres. Only the API and
-Postgres boxes exist today. [ADR 0002](docs/decisions/0002-sync-protocol.md) explains the
-protocol: why pushes are safe to retry, how the server detects conflicts, and why the change log
-takes a lock.
+the changes it has not seen, using a cursor into a change log in Postgres.
+
+- [ADR 0002](docs/decisions/0002-sync-protocol.md) explains the protocol: why pushes are safe to
+  retry, how the server detects conflicts, and why the change log takes a lock.
+- [ADR 0003](docs/decisions/0003-mobile-client.md) explains the app: the outbox, the
+  server-wins conflict policy, and retry with backoff.
 
 ## Run it
 
@@ -77,6 +81,8 @@ curl 'localhost:3000/sync/pull?limit=2'
 
 The response holds the first two products, a cursor, and `"hasMore":true`. Pass the cursor back
 as `?cursor=2` to get the rest.
+
+To run the Flutter app against this stack, see [apps/mobile/README.md](apps/mobile/README.md).
 
 To stop the stack and delete the database volume, run `docker compose down --volumes`.
 
@@ -184,7 +190,7 @@ Logs are JSON lines from pino.
 
 - `apps/api`: Fastify API. Migrations are in `apps/api/drizzle` and run when the API starts.
   The sync code is in `apps/api/src/sync`.
-- `apps/mobile`: placeholder for the Flutter app.
+- `apps/mobile`: Flutter app with SQLite storage, an outbox, and the sync engine.
 - `docs/decisions`: architecture decision records.
 - `PROGRESS.md`: what is done and what comes next.
 
@@ -197,11 +203,15 @@ Logs are JSON lines from pino.
 - [x] Push endpoint that applies a batch of order changes and returns the stored result for a
       retried mutation
 - [x] Conflict detection with row versions. The server reports conflicts and does not merge.
-- [ ] Conflict resolution policy on the phone
-- [ ] Flutter client: SQLite storage, outbox queue, sync with retry and backoff
-- [ ] End-to-end test of an offline edit, a reconnect, and a sync
+- [x] Flutter client: SQLite storage, outbox queue, sync with retry and backoff
+- [x] Conflict policy on the phone: the server copy wins and the rep sees a notice
+- [x] Tests that run phones against a real API: offline edits, a lost response, a conflict
+- [ ] Run and test on an Android device
+- [ ] Authentication, and limiting each rep to their own orders
+- [ ] Retention for the change log and the stored push results
+- [ ] A snapshot for new phones, so they do not replay the whole log
 
-No unchecked item exists yet. There is also no authentication.
+The unchecked items do not exist yet.
 
 ## License
 
