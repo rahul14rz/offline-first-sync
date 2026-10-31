@@ -11,7 +11,8 @@ that sync: a Fastify, TypeScript, and Postgres API, and a Flutter client with a 
 database and an outbox queue. The domain is offline order taking. The reasons are in
 [ADR 0001](docs/decisions/0001-stack.md).
 
-Status: only the API scaffold exists. See the [roadmap](#roadmap).
+Status: the API's push and pull endpoints exist. The Flutter client does not. See the
+[roadmap](#roadmap).
 
 ## Planned architecture
 
@@ -30,7 +31,9 @@ flowchart LR
 The phone writes to SQLite and adds each change to the outbox in the same transaction. The sync
 client pushes the outbox to the API and retries until the API confirms. The client then pulls
 the changes it has not seen, using a cursor into a change log in Postgres. Only the API and
-Postgres boxes exist today, with a health check and no sync endpoints.
+Postgres boxes exist today. [ADR 0002](docs/decisions/0002-sync-protocol.md) explains the
+protocol: why pushes are safe to retry, how the server detects conflicts, and why the change log
+takes a lock.
 
 ## Run it
 
@@ -60,7 +63,73 @@ The API answers with:
 
 If Postgres is down, the API answers with HTTP 503 and `{"status":"unavailable","database":"unreachable"}`.
 
+To add three demo products, run the seed command in the API container:
+
+```bash
+docker compose exec api node dist/seed.js
+```
+
+Then pull the change log:
+
+```bash
+curl 'localhost:3000/sync/pull?limit=2'
+```
+
+The response holds the first two products, a cursor, and `"hasMore":true`. Pass the cursor back
+as `?cursor=2` to get the rest.
+
 To stop the stack and delete the database volume, run `docker compose down --volumes`.
+
+## Sync API
+
+Both endpoints take and return JSON. `apps/api/src/sync/protocol.ts` has the full schema.
+
+`GET /sync/pull?cursor=<cursor>&limit=<n>` returns the changes after `cursor`, oldest first.
+Omit `cursor` to start from the beginning. `limit` defaults to 100, with a maximum of 500.
+
+After the seed, `curl 'localhost:3000/sync/pull?limit=1'` returns the following. The ids differ
+on each machine.
+
+```json
+{
+  "changes": [
+    {
+      "entity": "product",
+      "id": "23297fd2-50a7-4c46-8d24-ae6cb7d02c03",
+      "op": "upsert",
+      "version": 1,
+      "data": { "sku": "APL-1L", "name": "Apple juice 1L", "priceCents": 250 }
+    }
+  ],
+  "cursor": "1",
+  "hasMore": true
+}
+```
+
+`POST /sync/push` takes up to 100 order mutations. The phone generates `mutationId` and the
+order `id`. `baseVersion` is the version the phone last saw, or `null` to create the order.
+
+```json
+{
+  "mutations": [
+    {
+      "mutationId": "8d1e4b0a-2c3f-4a5b-9c6d-7e8f9a0b1c2d",
+      "entity": "order",
+      "op": "upsert",
+      "id": "3f2c9a52-6a51-4e0c-9a7e-2f9d1c7b8e10",
+      "baseVersion": null,
+      "data": {
+        "customerName": "Corner Shop",
+        "lines": [{ "productId": "23297fd2-50a7-4c46-8d24-ae6cb7d02c03", "quantity": 2 }]
+      }
+    }
+  ]
+}
+```
+
+Each mutation gets a result. `applied` carries the new version. `conflict` carries the server's
+copy of the order. `rejected` carries a reason. Sending the same `mutationId` again returns the
+first result and changes nothing. A delete has `"op": "delete"`, the `id`, and a `baseVersion`.
 
 ## Develop
 
@@ -114,6 +183,7 @@ Logs are JSON lines from pino.
 ## Repository layout
 
 - `apps/api`: Fastify API. Migrations are in `apps/api/drizzle` and run when the API starts.
+  The sync code is in `apps/api/src/sync`.
 - `apps/mobile`: placeholder for the Flutter app.
 - `docs/decisions`: architecture decision records.
 - `PROGRESS.md`: what is done and what comes next.
@@ -122,14 +192,16 @@ Logs are JSON lines from pino.
 
 - [x] API scaffold: config validation, `GET /health` with a Postgres check, Drizzle migrations,
       Docker Compose, CI
-- [ ] Schema for products, orders, and order lines
-- [ ] Change log in Postgres and a pull endpoint that pages through it with a cursor
-- [ ] Push endpoint that applies a batch of client changes and ignores a batch it already applied
-- [ ] Conflict handling when the device and the server both change the same order
+- [x] Schema for products and orders
+- [x] Change log in Postgres and a pull endpoint that pages through it with a cursor
+- [x] Push endpoint that applies a batch of order changes and returns the stored result for a
+      retried mutation
+- [x] Conflict detection with row versions. The server reports conflicts and does not merge.
+- [ ] Conflict resolution policy on the phone
 - [ ] Flutter client: SQLite storage, outbox queue, sync with retry and backoff
 - [ ] End-to-end test of an offline edit, a reconnect, and a sync
 
-Nothing after the first item exists yet.
+No unchecked item exists yet. There is also no authentication.
 
 ## License
 

@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { afterAll, describe, expect, it } from "vitest";
 import { createPool, runMigrations } from "../src/db.js";
 
-const databaseUrl = process.env.DATABASE_URL ?? "postgres://sync:sync@localhost:5432/sync";
+import { databaseUrl } from "./helpers.js";
 
 describe("runMigrations", () => {
   const pool = createPool(databaseUrl);
