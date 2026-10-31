@@ -3,7 +3,7 @@ import prettier from "eslint-config-prettier";
 import tseslint from "typescript-eslint";
 
 export default tseslint.config(
-  { ignores: ["**/dist/", "**/node_modules/", "**/drizzle/"] },
+  { ignores: ["**/dist/", "**/node_modules/", "**/drizzle/", "apps/mobile/"] },
   js.configs.recommended,
   tseslint.configs.strictTypeChecked,
   {

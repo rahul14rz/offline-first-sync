@@ -58,3 +58,71 @@ jobs:
           test "$(jq '.changes | length' pull.json)" -eq 3
       - if: always()
         run: docker compose down --volumes
+
+  mobile:
+    name: Flutter analyze and test against the API
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_USER: sync
+          POSTGRES_PASSWORD: sync
+          POSTGRES_DB: sync
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U sync -d sync"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 15
+    env:
+      DATABASE_URL: postgres://sync:sync@localhost:5432/sync
+    defaults:
+      run:
+        working-directory: apps/mobile
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Start the API and seed products
+        working-directory: apps/api
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm build
+          node dist/seed.js
+          nohup node dist/server.js > api.log 2>&1 &
+          for _ in $(seq 1 30); do curl --fail --silent localhost:3000/health && exit 0; sleep 1; done
+          cat api.log
+          exit 1
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.47.9
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: dart format --output=none --set-exit-if-changed lib test
+      - run: flutter analyze
+      - run: flutter test
+
+  android:
+    name: Build Android debug APK
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/mobile
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.47.9
+          channel: stable
+          cache: true
+      - run: flutter build apk --debug
