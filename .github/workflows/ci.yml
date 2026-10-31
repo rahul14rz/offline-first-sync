@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    name: Lint, typecheck, test
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_USER: sync
+          POSTGRES_PASSWORD: sync
+          POSTGRES_DB: sync
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U sync -d sync"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 15
+    env:
+      DATABASE_URL: postgres://sync:sync@localhost:5432/sync
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test
+
+  compose:
+    name: docker compose smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: docker compose up --build --detach
+      - name: Wait for GET /health to return 200
+        run: |
+          for _ in $(seq 1 30); do
+            if curl --fail --silent localhost:3000/health; then exit 0; fi
+            sleep 2
+          done
+          docker compose logs
+          exit 1
+      - if: always()
+        run: docker compose down --volumes
