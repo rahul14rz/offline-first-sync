@@ -53,6 +53,15 @@ describe("GET /sync/pull", () => {
     ]);
   });
 
+  it("adds no change when a product is written again unchanged", async () => {
+    await upsertProduct(db, apple);
+    await upsertProduct(db, apple);
+
+    const { body } = await pull("");
+
+    expect(body.changes).toHaveLength(1);
+  });
+
   it("pages through the log with the returned cursor", async () => {
     await upsertProduct(db, apple);
     await upsertProduct(db, bread);
