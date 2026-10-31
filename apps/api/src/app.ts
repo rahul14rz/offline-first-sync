@@ -1,6 +1,8 @@
 import Fastify, { type FastifyInstance } from "fastify";
 import type pg from "pg";
 import type { LogLevel } from "./config.js";
+import { createDb } from "./db.js";
+import { registerSyncRoutes } from "./sync/routes.js";
 
 export type AppDeps = {
   pool: pg.Pool;
@@ -30,6 +32,8 @@ export function buildApp({ pool, logLevel }: AppDeps): FastifyInstance {
       return { status: "unavailable", database: "unreachable" };
     }
   });
+
+  registerSyncRoutes(app, createDb(pool));
 
   return app;
 }

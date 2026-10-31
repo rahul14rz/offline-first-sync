@@ -2,7 +2,7 @@ import { afterAll, describe, expect, it, vi } from "vitest";
 import { buildApp } from "../src/app.js";
 import { createPool } from "../src/db.js";
 
-const databaseUrl = process.env.DATABASE_URL ?? "postgres://sync:sync@localhost:5432/sync";
+import { databaseUrl } from "./helpers.js";
 
 describe("GET /health", () => {
   const reachable = createPool(databaseUrl);
