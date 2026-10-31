@@ -1,0 +1,1 @@
+-- Intentionally empty. It proves migrations run on startup; the sync API adds tables in later migrations.
