@@ -51,5 +51,10 @@ jobs:
           done
           docker compose logs
           exit 1
+      - name: Seed products and pull them
+        run: |
+          docker compose exec -T api node dist/seed.js
+          curl --fail --silent localhost:3000/sync/pull | tee pull.json
+          test "$(jq '.changes | length' pull.json)" -eq 3
       - if: always()
         run: docker compose down --volumes
