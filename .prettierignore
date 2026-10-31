@@ -1,3 +1,5 @@
 pnpm-lock.yaml
 dist/
 **/drizzle/meta/
+# Flutter app: formatted with dart format, see apps/mobile/README.md
+apps/mobile/
