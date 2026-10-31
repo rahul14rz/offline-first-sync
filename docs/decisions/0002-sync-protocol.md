@@ -16,7 +16,7 @@ A phone takes orders while offline and syncs later. The sync must satisfy these 
 
 ### Data the phones sync
 
-- `products` belong to the server. Phones only pull them. This branch has no endpoint that
+- `products` belong to the server. Phones only pull them. The API has no endpoint that
   writes products. `pnpm --filter @offline-first-sync/api db:seed` adds demo products.
 - `orders` are created, edited, and deleted on phones. An order keeps its lines in a `jsonb`
   column. The order is the unit that syncs and conflicts. A phone never sends one line on its
@@ -76,7 +76,9 @@ Each mutation gets one of three results:
 - `rejected`, with a reason. This happens when a line refers to a product that does not exist.
 
 The server stores every result in `applied_mutations`, keyed by `mutationId`. If a mutation
-arrives again, the server returns the stored result and writes nothing. This gives rule 1. The
+arrives again, the server returns the stored result and writes nothing. The server does not
+compare the payload of the second request with the first. A client must not reuse a
+`mutationId` for a different change. This gives rule 1. The
 push transaction holds the change log lock, so two pushes with the same `mutationId` cannot
 both apply it.
 

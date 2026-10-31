@@ -1,6 +1,7 @@
 # 0001. Stack and demo domain
 
-- Status: accepted
+- Status: accepted. [ADR 0002](0002-sync-protocol.md) replaces the planned `order_lines` table
+  with a `lines` column on `orders`.
 - Date: 2026-10-31
 
 ## Context
